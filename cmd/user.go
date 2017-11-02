@@ -15,48 +15,129 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
+	"fmt"
+	"os"
+	"strconv"
 	"github.com/spf13/cobra"
 )
 
-// userCmd represents the user command
 var userCmd = &cobra.Command{
 	Use:   "user",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	PreRun: func(cmd2 *cobra.Command, args []string){
+	Short: "user command to manage users",
+	PersistentPreRun: func(cmd *cobra.Command, args []string){
+		RootCmd.PersistentPreRun(cmd, args)
 		sqlStmt := `
-		CREATE TABLE IF NOT EXISTS users (id integer not null primary key, firstname text, lastname text, enabled boolean, email text);
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER NOT NULL PRIMARY KEY, 
+			firstname TEXT, 
+			lastname TEXT, 
+			enabled TEXT, 
+			email TEXT NOT NULL UNIQUE);
 		`
-		erg, err := cmd.Db.Exec(sqlStmt)
-		if err != nil {
-			log.Printf("%q: %s\n", err, sqlStmt)
-			return
-		} else {
-			log.Printf("create user table %s", erg)
+		_, err := db.Exec(sqlStmt)
+		handleErr(err)		
+	},
+}
+
+var firstname string
+var lastname string
+
+var userAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "add a user to the user table",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 || len(args)>1 {
+			log.Fatal("Need email address");
+			os.Exit(1)
+		}
+		tx, err := db.Begin()
+		handleErr(err)		
+		defer tx.Rollback()
+		stmt, err := tx.Prepare("INSERT INTO users(firstname, lastname, enabled, email) VALUES (?,?,1,?)")
+		handleErr(err)		
+		defer stmt.Close() // danger!
+		_, err = stmt.Exec(firstname, lastname, args[0])
+		handleErr(err)		
+		err = tx.Commit()
+		handleErr(err)		
+		log.Println("User created")
+	},
+}
+
+var userLsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "list alls users",
+	Run: func(cmd *cobra.Command, args []string) {
+		rows, err := db.Query("SELECT * FROM users")
+		handleErr(err)
+
+		defer rows.Close()
+		fmt.Printf("%2s|%-25s|%7s|%s\n", "ID", "EMAIL", "ENABLED", "NAME")
+		fmt.Printf("--|-------------------------|-------|-------------\n")
+		for rows.Next() {
+			var id int
+			var email string
+			var firstname string
+			var lastname string
+			var enabled bool
+			err = rows.Scan(&id, &firstname, &lastname, &enabled, &email)
+			handleErr(err)
+			fmt.Printf("%02d|%-25s|%-7t|%s,%s\n", id, email, enabled, firstname, lastname )
 		}
 	},
+}
+
+func changeUser(idStr string, enable bool) {
+	id, err := strconv.Atoi(idStr)
+	handleErr(err)
+	
+	tx, err := db.Begin()
+	handleErr(err)
+
+	stmt, err := tx.Prepare("UPDATE users SET enabled=? WHERE id=?")
+	handleErr(err)
+	defer stmt.Close()
+
+	_, err = stmt.Exec(enable, id)
+	if err != nil {
+		tx.Rollback()
+		handleErr(err)		
+	} else {
+		tx.Commit()
+	}
+}
+
+var userEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "enable user",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("user called")
+		if len(args)!=1 {
+			log.Fatal("Need user id")
+		} else {
+			changeUser(args[0], true)
+		}
+	},
+}
+
+var userDisableCmd = &cobra.Command{
+	Use:   "disable",
+	Short: "disable user",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args)!=1 {
+			log.Fatal("Need user id")
+		} else {
+			changeUser(args[0], false)
+		}
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(userCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// userCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// userCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	userCmd.AddCommand(userAddCmd)
+	userAddCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
+	userAddCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
+	userCmd.AddCommand(userLsCmd)
+	userCmd.AddCommand(userEnableCmd)
+	userCmd.AddCommand(userDisableCmd)
 }

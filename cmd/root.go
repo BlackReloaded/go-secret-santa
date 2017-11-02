@@ -15,7 +15,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"log"
 
@@ -29,7 +28,7 @@ import (
 
 var cfgFile string
 var dbFile string
-var Db sql.DB
+var db *sql.DB
 
 
 // RootCmd represents the base command when called without any subcommands
@@ -39,22 +38,22 @@ var RootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	PersistentPreRun: func(cmd *cobra.Command, args []string) { 
-		fmt.Printf("Hello World:%s\n", dbFile)
-		Db, err := sql.Open("sqlite3", dbFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer Db.Close()
+		log.Printf("Using database \"%s\"\n", dbFile)
+		var err error
+		db, err = sql.Open("sqlite3", dbFile)
+		handleErr(err)
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		err := db.Close()
+		handleErr(err)		
 	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	err := RootCmd.Execute()
+	handleErr(err)
 }
 
 func init() { 
@@ -79,10 +78,7 @@ func initConfig() {
 	} else {
 		// Find home directory.
 		home, err := homedir.Dir()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		handleErr(err)
 
 		// Search config in home directory with name ".wichteln" (without extension).
 		viper.AddConfigPath(home)
@@ -93,6 +89,13 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		log.Println("Using config file:", viper.ConfigFileUsed())
+	}
+}
+
+func handleErr(err error) {
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
 	}
 }
