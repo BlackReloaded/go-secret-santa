@@ -15,11 +15,10 @@
 package cmd
 
 import (
-	"os"
 	"log"
 
-	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -28,8 +27,7 @@ import (
 
 var cfgFile string
 var dbFile string
-var db *sql.DB
-
+var db *gorm.DB
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -37,15 +35,19 @@ var RootCmd = &cobra.Command{
 	Short: "wichteln is a little programm to generate pairs of user",
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	PersistentPreRun: func(cmd *cobra.Command, args []string) { 
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		log.Printf("Using database \"%s\"\n", dbFile)
 		var err error
-		db, err = sql.Open("sqlite3", dbFile)
-		handleErr(err)
+		db, err = gorm.Open("sqlite3", "test.db")
+		if err != nil {
+			log.Fatal(err)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		err := db.Close()
-		handleErr(err)		
+		if err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 
@@ -53,10 +55,12 @@ var RootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := RootCmd.Execute()
-	handleErr(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func init() { 
+func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
@@ -78,7 +82,9 @@ func initConfig() {
 	} else {
 		// Find home directory.
 		home, err := homedir.Dir()
-		handleErr(err)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		// Search config in home directory with name ".wichteln" (without extension).
 		viper.AddConfigPath(home)
@@ -90,12 +96,5 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		log.Println("Using config file:", viper.ConfigFileUsed())
-	}
-}
-
-func handleErr(err error) {
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(1)
 	}
 }

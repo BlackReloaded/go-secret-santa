@@ -15,52 +15,49 @@
 package cmd
 
 import (
-	"log"
 	"fmt"
-	"os"
+	"log"
 	"strconv"
+
+	"github.com/jinzhu/gorm"
 	"github.com/spf13/cobra"
 )
 
-var userCmd = &cobra.Command{
-	Use:   "user",
-	Short: "user command to manage users",
-	PersistentPreRun: func(cmd *cobra.Command, args []string){
-		RootCmd.PersistentPreRun(cmd, args)
-		sqlStmt := `
-		CREATE TABLE IF NOT EXISTS users (
-			id INTEGER NOT NULL PRIMARY KEY, 
-			firstname TEXT, 
-			lastname TEXT, 
-			enabled TEXT, 
-			email TEXT NOT NULL UNIQUE);
-		`
-		_, err := db.Exec(sqlStmt)
-		handleErr(err)		
-	},
+type User struct {
+	gorm.Model
+	Firstname string
+	Lastname  string
+	Enabled   bool
+	Email     string `gorm:"type:varchar(255);unique;not null"`
 }
 
 var firstname string
 var lastname string
+var email string
+
+var userCmd = &cobra.Command{
+	Use:   "user",
+	Short: "user command to manage users",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		RootCmd.PersistentPreRun(cmd, args)
+		db.AutoMigrate(&User{})
+	},
+}
 
 var userAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "add a user to the user table",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) == 0 || len(args)>1 {
-			log.Fatal("Need email address");
-			os.Exit(1)
+		if len(args) == 0 || len(args) > 1 {
+			log.Fatal("Need email address")
 		}
-		tx, err := db.Begin()
-		handleErr(err)		
-		defer tx.Rollback()
-		stmt, err := tx.Prepare("INSERT INTO users(firstname, lastname, enabled, email) VALUES (?,?,1,?)")
-		handleErr(err)		
-		defer stmt.Close() // danger!
-		_, err = stmt.Exec(firstname, lastname, args[0])
-		handleErr(err)		
-		err = tx.Commit()
-		handleErr(err)		
+		user := User{
+			Firstname: firstname,
+			Lastname:  lastname,
+			Email:     args[0],
+			Enabled:   true,
+		}
+		db.Create(&user)
 		log.Println("User created")
 	},
 }
@@ -69,50 +66,55 @@ var userLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "list alls users",
 	Run: func(cmd *cobra.Command, args []string) {
-		rows, err := db.Query("SELECT * FROM users")
-		handleErr(err)
-
-		defer rows.Close()
+		users := []User{}
+		db.Find(&users)
 		fmt.Printf("%2s|%-25s|%7s|%s\n", "ID", "EMAIL", "ENABLED", "NAME")
 		fmt.Printf("--|-------------------------|-------|-------------\n")
-		for rows.Next() {
-			var id int
-			var email string
-			var firstname string
-			var lastname string
-			var enabled bool
-			err = rows.Scan(&id, &firstname, &lastname, &enabled, &email)
-			handleErr(err)
-			fmt.Printf("%02d|%-25s|%-7t|%s,%s\n", id, email, enabled, firstname, lastname )
+		for _, user := range users {
+			fmt.Printf("%02d|%-25s|%-7t|%s,%s\n", user.ID, user.Email, user.Enabled, user.Firstname, user.Lastname)
 		}
+	},
+}
+
+var userUdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "update a user to the user table",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 || len(args) > 1 {
+			log.Fatal("Need email address")
+		}
+		user := User{}
+		db.First(&user, args[0])
+		if len(firstname) > 0 {
+			user.Firstname = firstname
+		}
+		if len(lastname) > 0 {
+			user.Lastname = lastname
+		}
+		if len(email) > 0 {
+			user.Email = email
+		}
+		db.Save(&user)
+		log.Println("User updated")
 	},
 }
 
 func changeUser(idStr string, enable bool) {
 	id, err := strconv.Atoi(idStr)
-	handleErr(err)
-	
-	tx, err := db.Begin()
-	handleErr(err)
-
-	stmt, err := tx.Prepare("UPDATE users SET enabled=? WHERE id=?")
-	handleErr(err)
-	defer stmt.Close()
-
-	_, err = stmt.Exec(enable, id)
 	if err != nil {
-		tx.Rollback()
-		handleErr(err)		
-	} else {
-		tx.Commit()
+		log.Fatal(err)
 	}
+	user := User{}
+	db.First(&user, id)
+	user.Enabled = enable
+	db.Save(&user)
 }
 
 var userEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "enable user",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args)!=1 {
+		if len(args) != 1 {
 			log.Fatal("Need user id")
 		} else {
 			changeUser(args[0], true)
@@ -124,7 +126,7 @@ var userDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "disable user",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args)!=1 {
+		if len(args) != 1 {
 			log.Fatal("Need user id")
 		} else {
 			changeUser(args[0], false)
@@ -140,4 +142,8 @@ func init() {
 	userCmd.AddCommand(userLsCmd)
 	userCmd.AddCommand(userEnableCmd)
 	userCmd.AddCommand(userDisableCmd)
+	userCmd.AddCommand(userUdateCmd)
+	userUdateCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
+	userUdateCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
+	userUdateCmd.Flags().StringVar(&email, "email", "", "Email of the user")
 }
