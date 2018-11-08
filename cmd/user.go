@@ -1,46 +1,40 @@
-// Copyright © 2017 NAME HERE <EMAIL ADDRESS>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package cmd
+package main
 
 import (
 	"fmt"
 	"log"
-	"strconv"
+	"os"
 
-	"github.com/jinzhu/gorm"
+	"github.com/blackreloaded/go-secret-santa"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/pkg/errors"
 )
-
-type User struct {
-	gorm.Model
-	Firstname string
-	Lastname  string
-	Enabled   bool
-	Email     string `gorm:"type:varchar(255);unique;not null"`
-}
 
 var firstname string
 var lastname string
 var email string
 
+func init() {
+	rootCmd.AddCommand(userCmd)
+	userCmd.AddCommand(userAddCmd)
+	userAddCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
+	userAddCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
+	userCmd.AddCommand(userLsCmd)
+	userCmd.AddCommand(userEnableCmd)
+	userCmd.AddCommand(userDisableCmd)
+	userCmd.AddCommand(userUdateCmd)
+	userUdateCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
+	userUdateCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
+	userUdateCmd.Flags().StringVar(&email, "email", "", "Email of the user")
+}
+
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "user command to manage users",
+	Args:  cobra.ExactArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		RootCmd.PersistentPreRun(cmd, args)
-		db.AutoMigrate(&User{})
+		rootCmd.PersistentPreRun(cmd, args)
 	},
 }
 
@@ -51,14 +45,17 @@ var userAddCmd = &cobra.Command{
 		if len(args) == 0 || len(args) > 1 {
 			log.Fatal("Need email address")
 		}
-		user := User{
+		user := &secretsanta.User{
 			Firstname: firstname,
 			Lastname:  lastname,
 			Email:     args[0],
 			Enabled:   true,
 		}
-		db.Create(&user)
-		log.Println("User created")
+		id, err := secretSanta.AddUser(user)
+		if err != nil {
+			log.Fatalf("failed to add user: %v", err)
+		}
+		log.Printf("user with id '%s' created\n", id)
 	},
 }
 
@@ -66,13 +63,22 @@ var userLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "list alls users",
 	Run: func(cmd *cobra.Command, args []string) {
-		users := []User{}
-		db.Find(&users)
-		fmt.Printf("%2s|%-25s|%7s|%s\n", "ID", "EMAIL", "ENABLED", "NAME")
-		fmt.Printf("--|-------------------------|-------|-------------\n")
-		for _, user := range users {
-			fmt.Printf("%02d|%-25s|%-7t|%s,%s\n", user.ID, user.Email, user.Enabled, user.Firstname, user.Lastname)
+		users, err := secretSanta.ListUsers()
+		if err != nil {
+			log.Fatalf("failed to load users: %v", err)
 		}
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"ID", "EMAIL", "ENABLED", "FIRSTNAME", "LASTNAME"})
+		for _, v := range users {
+			table.Append([]string{
+				v.ID,
+				v.Email,
+				fmt.Sprintf("%t", v.Enabled),
+				v.Firstname,
+				v.Lastname,
+			})
+		}
+		table.Render()
 	},
 }
 
@@ -81,33 +87,33 @@ var userUdateCmd = &cobra.Command{
 	Short: "update a user to the user table",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 || len(args) > 1 {
-			log.Fatal("Need email address")
+			log.Fatal("Need user id")
 		}
-		user := User{}
-		db.First(&user, args[0])
-		if len(firstname) > 0 {
+		user, err := secretSanta.GetUser(args[0])
+		if err != nil {
+			log.Fatalf("failed to load user: %v", err)
+		}
+		if firstname != "" {
 			user.Firstname = firstname
 		}
-		if len(lastname) > 0 {
+		if lastname != "" {
 			user.Lastname = lastname
 		}
-		if len(email) > 0 {
+		if email != "" {
 			user.Email = email
 		}
-		db.Save(&user)
-		log.Println("User updated")
+		secretSanta.UdateUser(user)
+		log.Printf("User with id '%s' updated\n", args[0])
 	},
 }
 
-func changeUser(idStr string, enable bool) {
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		log.Fatal(err)
+func changeUser(idStr string, enable bool) error {
+	user, err := secretSanta.GetUser(idStr)
+	if err!=nil {
+		return errors.Wrapf(err, "failed to load user: %s", idStr)
 	}
-	user := User{}
-	db.First(&user, id)
 	user.Enabled = enable
-	db.Save(&user)
+	return secretSanta.UdateUser(user)
 }
 
 var userEnableCmd = &cobra.Command{
@@ -132,18 +138,4 @@ var userDisableCmd = &cobra.Command{
 			changeUser(args[0], false)
 		}
 	},
-}
-
-func init() {
-	RootCmd.AddCommand(userCmd)
-	userCmd.AddCommand(userAddCmd)
-	userAddCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
-	userAddCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
-	userCmd.AddCommand(userLsCmd)
-	userCmd.AddCommand(userEnableCmd)
-	userCmd.AddCommand(userDisableCmd)
-	userCmd.AddCommand(userUdateCmd)
-	userUdateCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
-	userUdateCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
-	userUdateCmd.Flags().StringVar(&email, "email", "", "Email of the user")
 }
