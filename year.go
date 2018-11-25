@@ -156,3 +156,21 @@ func (ss *SecretSanta) GetYear(id string) (*Year, error) {
 	}
 	return year, nil
 }
+
+
+// RmYear removes a year by id
+func (ss *SecretSanta) RmYear(id string) (error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse uuid")
+	}
+	key, err := uid.MarshalBinary()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal uuid")
+	}
+	err = ss.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(yearBucket))
+		return b.Delete(key)
+	})
+	return err
+}

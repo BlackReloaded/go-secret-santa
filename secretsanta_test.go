@@ -172,8 +172,8 @@ func TestSecretSanta_SendInformation(t *testing.T) {
 		if to != "byer@example.de" {
 			t.Errorf("wrong to address want: byer@example.de, got: %s", to)
 		}
-		test := `{Max Musterman true byer@example.de}
-{John Doe true receiver@example.de}
+		test := `{` + bid + ` Max Musterman true byer@example.de}
+{` + rid + ` John Doe true receiver@example.de}
 2018
 Description
 15.5

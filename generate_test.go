@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -107,5 +108,28 @@ func TestSecretSanta_Generate(t *testing.T) {
 `
 	if test != buf.String() {
 		t.Errorf("failed to generate year: want %s, got %s,", test, buf.String())
+	}
+
+	var b strings.Builder
+	err = ss.SendInformation(year, "{{.ByerUser.Email}}->{{.ReceiverUser.Email}}", func(to, text string) error {
+		b.WriteString(to)
+		b.WriteString(":")
+		b.WriteString(text)
+		b.WriteString("\n")
+		return nil
+	})
+
+	if err != nil {
+		t.Errorf("failed to send information: %v", err)
+	}
+
+	test = `0@example.de:0@example.de->1@example.de
+2@example.de:2@example.de->3@example.de
+3@example.de:3@example.de->2@example.de
+1@example.de:1@example.de->0@example.de
+`
+
+	if test != b.String() {
+		t.Errorf("failed to generate year: want %s, got %s,", test, b.String())
 	}
 }

@@ -12,9 +12,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-const infoTmpl = `Hallo,
-du beschenkst {{ReceiverUser.Firstname}} {{ReceiverUser.Lastname}} mit einer maximalen höhe von {{Amount}}.tablewriter
-Rating: {{Rating}}
+const infoTmpl = `Hallo Wichtelfreunde,
+
+hier kommen die Daten für dieses Jahr:
+
+Jahr: {{.Year}}
+Betrag: {{.Amount}}€ 
+Besonderheiten: {{.Desc}}
+Du beschenkst: {{.ReceiverUser.Firstname}} {{.ReceiverUser.Lastname}} 
+Rating: {{.Rating}}
+
+Viel spaß :-)
 `
 
 // SecretSanta manage secret santa with a db. It is a Container for a BoltDB
@@ -155,7 +163,10 @@ func (ss *SecretSanta) SendInformation(year *Year, tmpl string, info SendInfo) e
 			Amount:       year.Amount,
 			Rating:       v.Rating,
 		})
-		info(bU.Email, w.String())
+		err = info(bU.Email, w.String())
+		if err!=nil {
+			return errors.Wrap(err, "failed to run info method")
+		}
 	}
 	return nil
 }
