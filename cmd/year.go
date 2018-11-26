@@ -9,6 +9,8 @@ import (
 	"github.com/blackreloaded/go-secret-santa"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 )
 
 var desc string
@@ -25,6 +27,7 @@ func init() {
 	yearUdateCmd.Flags().Float32Var(&amount, "amount", 0, "Amount of the year")
 	yearCmd.AddCommand(yearPrintCmd)
 	yearCmd.AddCommand(yearRmCmd)
+	yearCmd.AddCommand(yearPairCmd)
 }
 
 var yearCmd = &cobra.Command{
@@ -128,6 +131,56 @@ var yearUdateCmd = &cobra.Command{
 		if amount > 0 {
 			year.Amount = amount
 		}
+		err = secretSanta.UdateYear(year)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("Year updated")
+	},
+}
+
+func loadId(id string) (string, error) {
+	if _, err := uuid.Parse(id); err==nil {
+			return id, nil
+	}
+	users, err := secretSanta.ListUsers()
+	if err!=nil {
+		return "", errors.Wrap(err, "failed to load users")
+	}
+	for _, user := range users {
+		if user.Email==id {
+			return user.ID, nil
+		}
+	}
+	return "", errors.New("no user found")
+}
+
+
+var yearPairCmd = &cobra.Command{
+	Use:   "pair",
+	Short: "pair two people for this year",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) != 3 {
+			log.Fatal("Need year")
+		}
+		year, err := secretSanta.GetYear(args[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		byer, err := loadId(args[1])
+		if err!=nil {
+			log.Fatalf("failed to load user %s: %v", args[1], err)
+		}
+		receiver, err := loadId(args[2])
+		if err!=nil {
+			log.Fatalf("failed to load user %s: %v", args[2], err)
+		}
+
+		year.Pairing = append(year.Pairing, &secretsanta.Pairing{
+			ByerUserID: byer,
+			ReceiverUserID: receiver,
+			Rating: 0,
+		})
 		err = secretSanta.UdateYear(year)
 		if err != nil {
 			log.Fatal(err)
