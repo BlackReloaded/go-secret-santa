@@ -105,7 +105,7 @@ func (ss *SecretSanta) UdateUser(user *User) error {
 }
 
 // ListUsers lists all user in the database
-func (ss *SecretSanta) ListUsers() ([]*User, error) {
+func (ss *SecretSanta) ListUsers(disabled bool) ([]*User, error) {
 	users := []*User{}
 	err := ss.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(userBucket))
@@ -113,6 +113,9 @@ func (ss *SecretSanta) ListUsers() ([]*User, error) {
 			user := &User{}
 			if err := json.Unmarshal(v, user); err != nil {
 				return errors.Wrap(err, "failed to unmarshal user")
+			}
+			if !user.Enabled && !disabled {
+				return nil
 			}
 			users = append(users, user)
 			return nil
@@ -148,4 +151,21 @@ func (ss *SecretSanta) GetUser(id string) (*User, error) {
 		return nil, errors.Wrap(err, "failed to load user")
 	}
 	return user, nil
+}
+
+// RemoveUser remove a user by id
+func (ss *SecretSanta) RemoveUser(id string) error {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse uuid")
+	}
+	key, err := uid.MarshalText()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal uuid")
+	}
+	err = ss.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(userBucket))
+		return b.Delete(key)
+	})
+	return err
 }

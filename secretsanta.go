@@ -17,9 +17,9 @@ const infoTmpl = `Hallo Wichtelfreunde,
 hier kommen die Daten für dieses Jahr:
 
 Jahr: {{.Year}}
-Betrag: {{.Amount}}€ 
+Betrag: {{.Amount}}€
 Besonderheiten: {{.Desc}}
-Du beschenkst: {{.ReceiverUser.Firstname}} {{.ReceiverUser.Lastname}} 
+Du beschenkst: {{.ReceiverUser.Firstname}} {{.ReceiverUser.Lastname}}
 Rating: {{.Rating}}
 
 Viel spaß :-)
@@ -83,7 +83,7 @@ func (ss *SecretSanta) PrintAll(w io.Writer, year *Year) error {
 	})
 	t.Render()
 
-	users, err := ss.ListUsers()
+	users, err := ss.ListUsers(false)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (ss *SecretSanta) SendInformation(year *Year, tmpl string, info SendInfo) e
 	if year == nil || info == nil {
 		return errors.New("year and info are required")
 	}
-	users, err := ss.ListUsers()
+	users, err := ss.ListUsers(false)
 	if err != nil {
 		return errors.Wrap(err, "failed to load users")
 	}
@@ -164,7 +164,7 @@ func (ss *SecretSanta) SendInformation(year *Year, tmpl string, info SendInfo) e
 			Rating:       v.Rating,
 		})
 		err = info(bU.Email, w.String())
-		if err!=nil {
+		if err != nil {
 			return errors.Wrap(err, "failed to run info method")
 		}
 	}

@@ -157,9 +157,8 @@ func (ss *SecretSanta) GetYear(id string) (*Year, error) {
 	return year, nil
 }
 
-
 // RmYear removes a year by id
-func (ss *SecretSanta) RmYear(id string) (error) {
+func (ss *SecretSanta) RmYear(id string) error {
 	uid, err := uuid.Parse(id)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse uuid")

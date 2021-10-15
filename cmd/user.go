@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/blackreloaded/go-secret-santa"
+	secretsanta "github.com/blackreloaded/go-secret-santa"
 	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cobra"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 var firstname string
@@ -23,6 +23,7 @@ func init() {
 	userCmd.AddCommand(userLsCmd)
 	userCmd.AddCommand(userEnableCmd)
 	userCmd.AddCommand(userDisableCmd)
+	userCmd.AddCommand(userRemoveCmd)
 	userCmd.AddCommand(userUdateCmd)
 	userUdateCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
 	userUdateCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
@@ -63,7 +64,7 @@ var userLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "list alls users",
 	Run: func(cmd *cobra.Command, args []string) {
-		users, err := secretSanta.ListUsers()
+		users, err := secretSanta.ListUsers(true)
 		if err != nil {
 			log.Fatalf("failed to load users: %v", err)
 		}
@@ -107,9 +108,24 @@ var userUdateCmd = &cobra.Command{
 	},
 }
 
+var userRemoveCmd = &cobra.Command{
+	Use:   "rm",
+	Short: "remove a user to the user table",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 || len(args) > 1 {
+			log.Fatal("Need user id")
+		}
+		err := secretSanta.RemoveUser(args[0])
+		if err != nil {
+			log.Fatalf("failed to remove user: %v", err)
+		}
+		log.Printf("User with id '%s' removed\n", args[0])
+	},
+}
+
 func changeUser(idStr string, enable bool) error {
 	user, err := secretSanta.GetUser(idStr)
-	if err!=nil {
+	if err != nil {
 		return errors.Wrapf(err, "failed to load user: %s", idStr)
 	}
 	user.Enabled = enable

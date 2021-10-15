@@ -23,8 +23,9 @@ func (ss *SecretSanta) Generate(year *Year, autoSave bool, seed int64) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to list years")
 	}
-	sort.Sort(YearSlice{years})
-	users, err := ss.ListUsers()
+	sort.Sort(sort.Reverse(YearSlice{years}))
+
+	users, err := ss.ListUsers(false)
 	if err != nil {
 		return errors.Wrap(err, "failed to list users")
 	}

@@ -6,11 +6,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/blackreloaded/go-secret-santa"
-	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cobra"
+	secretsanta "github.com/blackreloaded/go-secret-santa"
 	"github.com/google/uuid"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 var desc string
@@ -87,7 +87,7 @@ var yearLsCmd = &cobra.Command{
 		for _, v := range years {
 			table.Append([]string{
 				v.ID,
-				fmt.Sprintf("%d",v.YearID),
+				fmt.Sprintf("%d", v.YearID),
 				v.Description,
 				fmt.Sprintf("%f", v.Amount),
 			})
@@ -100,15 +100,15 @@ var yearPrintCmd = &cobra.Command{
 	Use:   "print",
 	Short: "print a year",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args)!=1 {
+		if len(args) != 1 {
 			log.Fatal("need year id")
 		}
 		year, err := secretSanta.GetYear(args[0])
-		if err!=nil {
+		if err != nil {
 			log.Fatalf("faild to load year %v: %v", args[0], err)
 		}
 		err = secretSanta.PrintAll(os.Stdout, year)
-		if err!=nil {
+		if err != nil {
 			log.Fatalf("failed to print year %v: %v", args[0], err)
 		}
 	},
@@ -140,21 +140,20 @@ var yearUdateCmd = &cobra.Command{
 }
 
 func loadId(id string) (string, error) {
-	if _, err := uuid.Parse(id); err==nil {
-			return id, nil
+	if _, err := uuid.Parse(id); err == nil {
+		return id, nil
 	}
-	users, err := secretSanta.ListUsers()
-	if err!=nil {
+	users, err := secretSanta.ListUsers(false)
+	if err != nil {
 		return "", errors.Wrap(err, "failed to load users")
 	}
 	for _, user := range users {
-		if user.Email==id {
+		if user.Email == id {
 			return user.ID, nil
 		}
 	}
 	return "", errors.New("no user found")
 }
-
 
 var yearPairCmd = &cobra.Command{
 	Use:   "pair",
@@ -168,18 +167,18 @@ var yearPairCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		byer, err := loadId(args[1])
-		if err!=nil {
+		if err != nil {
 			log.Fatalf("failed to load user %s: %v", args[1], err)
 		}
 		receiver, err := loadId(args[2])
-		if err!=nil {
+		if err != nil {
 			log.Fatalf("failed to load user %s: %v", args[2], err)
 		}
 
 		year.Pairing = append(year.Pairing, &secretsanta.Pairing{
-			ByerUserID: byer,
+			ByerUserID:     byer,
 			ReceiverUserID: receiver,
-			Rating: 0,
+			Rating:         0,
 		})
 		err = secretSanta.UdateYear(year)
 		if err != nil {
