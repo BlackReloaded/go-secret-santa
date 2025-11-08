@@ -18,7 +18,7 @@ func TestSecretSanta_Generate(t *testing.T) {
 		os.Remove("testdata/generate_test.db")
 	}()
 
-	uids := []string{}
+	var uids []uint32
 	for i := 0; i < 4; i++ {
 		uid, err := ss.AddUser(&User{
 			Email:     fmt.Sprintf("%d@example.de", i),
@@ -44,12 +44,12 @@ func TestSecretSanta_Generate(t *testing.T) {
 		}
 		p := &Pairing{
 			Rating:         1,
-			ByerUserID:     uids[i],
+			BuyerUserID:    uids[i],
 			ReceiverUserID: uids[j],
 		}
 		lastYear.Pairing = append(lastYear.Pairing, p)
 	}
-	_, err = ss.AddYear(lastYear)
+	err = ss.AddYear(lastYear)
 	if err != nil {
 		t.Fatal("failed to save last year")
 	}
@@ -68,12 +68,12 @@ func TestSecretSanta_Generate(t *testing.T) {
 		}
 		p := &Pairing{
 			Rating:         1,
-			ByerUserID:     uids[i],
+			BuyerUserID:    uids[i],
 			ReceiverUserID: uids[j],
 		}
 		lastYear.Pairing = append(lastYear.Pairing, p)
 	}
-	_, err = ss.AddYear(lastYear)
+	err = ss.AddYear(lastYear)
 	if err != nil {
 		t.Fatal("failed to save last year")
 	}
@@ -94,7 +94,7 @@ func TestSecretSanta_Generate(t *testing.T) {
 | Description | Alles neu |
 +-------------+-----------+
 +-----+--------------------------------+--------------------------------+--------+
-| NO  |              BYER              |            RECEIVER            | RATING |
+| NO  |              BUYER              |            RECEIVER            | RATING |
 +-----+--------------------------------+--------------------------------+--------+
 |   0 | Lastname_0,Firstname_0         | Lastname_1,Firstname_1         |    0.5 |
 |     | (0@example.de)                 | (1@example.de)                 |        |
@@ -111,7 +111,7 @@ func TestSecretSanta_Generate(t *testing.T) {
 	}
 
 	var b strings.Builder
-	err = ss.SendInformation(year, "{{.ByerUser.Email}}->{{.ReceiverUser.Email}}", func(to, text string) error {
+	err = ss.SendInformation(year, "{{.BuyerUser.Email}}->{{.ReceiverUser.Email}}", func(to, text string) error {
 		b.WriteString(to)
 		b.WriteString(":")
 		b.WriteString(text)

@@ -7,9 +7,7 @@ import (
 	"strconv"
 
 	secretsanta "github.com/blackreloaded/go-secret-santa"
-	"github.com/google/uuid"
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -51,11 +49,11 @@ var yearAddCmd = &cobra.Command{
 		}
 		id, _ := strconv.ParseUint(args[0], 10, 32)
 		year.YearID = uint32(id)
-		yid, err := secretSanta.AddYear(year)
+		err := secretSanta.AddYear(year)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Year created with id %s\n", yid)
+		log.Printf("Year created with id %s\n", year.YearID)
 	},
 }
 
@@ -66,7 +64,8 @@ var yearRmCmd = &cobra.Command{
 		if len(args) == 0 || len(args) > 1 {
 			log.Fatal("Need year id")
 		}
-		err := secretSanta.RmYear(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		err := secretSanta.RmYear(uint32(id))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -83,14 +82,13 @@ var yearLsCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "YEARID", "DESCRIPTION", "AMOUNT"})
+		table.Header("YEARID", "DESCRIPTION", "AMOUNT")
 		for _, v := range years {
-			table.Append([]string{
-				v.ID,
+			table.Append(
 				fmt.Sprintf("%d", v.YearID),
 				v.Description,
 				fmt.Sprintf("%f", v.Amount),
-			})
+			)
 		}
 		table.Render()
 	},
@@ -103,7 +101,8 @@ var yearPrintCmd = &cobra.Command{
 		if len(args) != 1 {
 			log.Fatal("need year id")
 		}
-		year, err := secretSanta.GetYear(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		year, err := secretSanta.GetYear(uint32(id))
 		if err != nil {
 			log.Fatalf("faild to load year %v: %v", args[0], err)
 		}
@@ -121,7 +120,8 @@ var yearUdateCmd = &cobra.Command{
 		if len(args) == 0 || len(args) > 1 {
 			log.Fatal("Need year")
 		}
-		year, err := secretSanta.GetYear(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		year, err := secretSanta.GetYear(uint32(id))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -131,7 +131,7 @@ var yearUdateCmd = &cobra.Command{
 		if amount > 0 {
 			year.Amount = amount
 		}
-		err = secretSanta.UdateYear(year)
+		err = secretSanta.UpdateYear(year)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -139,20 +139,17 @@ var yearUdateCmd = &cobra.Command{
 	},
 }
 
-func loadId(id string) (string, error) {
-	if _, err := uuid.Parse(id); err == nil {
-		return id, nil
-	}
+func loadId(id string) (uint32, error) {
 	users, err := secretSanta.ListUsers(false)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to load users")
+		return 0, fmt.Errorf("failed to load users: %w", err)
 	}
 	for _, user := range users {
 		if user.Email == id {
 			return user.ID, nil
 		}
 	}
-	return "", errors.New("no user found")
+	return 0, fmt.Errorf("no user found")
 }
 
 var yearPairCmd = &cobra.Command{
@@ -162,7 +159,8 @@ var yearPairCmd = &cobra.Command{
 		if len(args) != 3 {
 			log.Fatal("Need year")
 		}
-		year, err := secretSanta.GetYear(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		year, err := secretSanta.GetYear(uint32(id))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -176,11 +174,11 @@ var yearPairCmd = &cobra.Command{
 		}
 
 		year.Pairing = append(year.Pairing, &secretsanta.Pairing{
-			ByerUserID:     byer,
+			BuyerUserID:    byer,
 			ReceiverUserID: receiver,
 			Rating:         0,
 		})
-		err = secretSanta.UdateYear(year)
+		err = secretSanta.UpdateYear(year)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	secretsanta "github.com/blackreloaded/go-secret-santa"
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +56,7 @@ var userAddCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("failed to add user: %v", err)
 		}
-		log.Printf("user with id '%s' created\n", id)
+		log.Printf("user with id '%d' created\n", id)
 	},
 }
 
@@ -69,15 +69,15 @@ var userLsCmd = &cobra.Command{
 			log.Fatalf("failed to load users: %v", err)
 		}
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "EMAIL", "ENABLED", "FIRSTNAME", "LASTNAME"})
+		table.Header("ID", "EMAIL", "ENABLED", "FIRSTNAME", "LASTNAME")
 		for _, v := range users {
-			table.Append([]string{
+			table.Append(
 				v.ID,
 				v.Email,
 				fmt.Sprintf("%t", v.Enabled),
 				v.Firstname,
 				v.Lastname,
-			})
+			)
 		}
 		table.Render()
 	},
@@ -90,7 +90,8 @@ var userUdateCmd = &cobra.Command{
 		if len(args) == 0 || len(args) > 1 {
 			log.Fatal("Need user id")
 		}
-		user, err := secretSanta.GetUser(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		user, err := secretSanta.GetUser(uint32(id))
 		if err != nil {
 			log.Fatalf("failed to load user: %v", err)
 		}
@@ -103,7 +104,7 @@ var userUdateCmd = &cobra.Command{
 		if email != "" {
 			user.Email = email
 		}
-		secretSanta.UdateUser(user)
+		secretSanta.UpdateUser(user)
 		log.Printf("User with id '%s' updated\n", args[0])
 	},
 }
@@ -115,7 +116,8 @@ var userRemoveCmd = &cobra.Command{
 		if len(args) == 0 || len(args) > 1 {
 			log.Fatal("Need user id")
 		}
-		err := secretSanta.RemoveUser(args[0])
+		id, _ := strconv.ParseUint(args[0], 10, 32)
+		err := secretSanta.RemoveUser(uint32(id))
 		if err != nil {
 			log.Fatalf("failed to remove user: %v", err)
 		}
@@ -124,12 +126,13 @@ var userRemoveCmd = &cobra.Command{
 }
 
 func changeUser(idStr string, enable bool) error {
-	user, err := secretSanta.GetUser(idStr)
+	id, _ := strconv.ParseUint(idStr, 10, 32)
+	user, err := secretSanta.GetUser(uint32(id))
 	if err != nil {
-		return errors.Wrapf(err, "failed to load user: %s", idStr)
+		return fmt.Errorf("failed to load user: %s : %w", idStr, err)
 	}
 	user.Enabled = enable
-	return secretSanta.UdateUser(user)
+	return secretSanta.UpdateUser(user)
 }
 
 var userEnableCmd = &cobra.Command{

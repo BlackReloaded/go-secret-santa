@@ -2,21 +2,21 @@ package secretsanta
 
 import (
 	"bytes"
+	"database/sql"
 	"os"
+	"strconv"
 	"testing"
-
-	"github.com/boltdb/bolt"
 )
 
 func TestNewWithDB(t *testing.T) {
-	db, err := bolt.Open("testdata/test.db", 0600, nil)
+	db, err := sql.Open("sqlite3", "testdata/test.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	tests := []struct {
 		name    string
-		args    *bolt.DB
+		args    *sql.DB
 		wantErr bool
 	}{
 		{
@@ -82,7 +82,7 @@ func TestSecretSanta_PrintAll(t *testing.T) {
 	defer os.Remove("secretsanta_test.db")
 
 	bid, err := ss.AddUser(&User{
-		Email:     "byer@example.de",
+		Email:     "buyer@example.de",
 		Enabled:   true,
 		Firstname: "Max",
 		Lastname:  "Musterman",
@@ -106,7 +106,7 @@ func TestSecretSanta_PrintAll(t *testing.T) {
 		YearID:      2018,
 		Pairing: []*Pairing{
 			{
-				ByerUserID:     bid,
+				BuyerUserID:    bid,
 				ReceiverUserID: rid,
 				Rating:         0.5,
 			},
@@ -123,7 +123,7 @@ func TestSecretSanta_PrintAll(t *testing.T) {
 | NO  |              BYER              |            RECEIVER            | RATING |
 +-----+--------------------------------+--------------------------------+--------+
 |   0 | Musterman,Max                  | Doe,John (receiver@example.de) |    0.5 |
-|     | (byer@example.de)              |                                |        |
+|     | (buyer@example.de)              |                                |        |
 +-----+--------------------------------+--------------------------------+--------+
 `
 	if result != buf.String() {
@@ -140,7 +140,7 @@ func TestSecretSanta_SendInformation(t *testing.T) {
 	defer os.Remove("secretsanta_test.db")
 
 	bid, err := ss.AddUser(&User{
-		Email:     "byer@example.de",
+		Email:     "buyer@example.de",
 		Enabled:   true,
 		Firstname: "Max",
 		Lastname:  "Musterman",
@@ -161,7 +161,7 @@ func TestSecretSanta_SendInformation(t *testing.T) {
 		YearID:      2018,
 		Pairing: []*Pairing{
 			{
-				ByerUserID:     bid,
+				BuyerUserID:    bid,
 				ReceiverUserID: rid,
 				Rating:         0.5,
 			},
@@ -169,11 +169,11 @@ func TestSecretSanta_SendInformation(t *testing.T) {
 	}
 
 	send := func(to, text string) error {
-		if to != "byer@example.de" {
-			t.Errorf("wrong to address want: byer@example.de, got: %s", to)
+		if to != "buyer@example.de" {
+			t.Errorf("wrong to address want: buyer@example.de, got: %s", to)
 		}
-		test := `{` + bid + ` Max Musterman true byer@example.de}
-{` + rid + ` John Doe true receiver@example.de}
+		test := `{` + strconv.FormatUint(uint64(bid), 10) + ` Max Musterman true buyer@example.de}
+{` + strconv.FormatUint(uint64(rid), 10) + ` John Doe true receiver@example.de}
 2018
 Description
 15.5

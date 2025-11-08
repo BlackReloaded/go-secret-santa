@@ -1,15 +1,14 @@
 package secretsanta
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
-var errNoPartner = errors.New("no partner to select")
+var errNoPartner = fmt.Errorf("no partner to select")
 
 type userCount struct {
 	index int
@@ -21,16 +20,16 @@ type userCount struct {
 func (ss *SecretSanta) Generate(year *Year, autoSave bool, seed int64) error {
 	years, err := ss.ListYears()
 	if err != nil {
-		return errors.Wrap(err, "failed to list years")
+		return fmt.Errorf("failed to list years: %w", err)
 	}
 	sort.Sort(sort.Reverse(YearSlice{years}))
 
 	users, err := ss.ListUsers(false)
 	if err != nil {
-		return errors.Wrap(err, "failed to list users")
+		return fmt.Errorf("failed to list users: %w", err)
 	}
 	if len(users) == 0 {
-		return errors.New("need more user")
+		return fmt.Errorf("need more user")
 	}
 	sort.Sort(UserSlice{users})
 
@@ -42,12 +41,12 @@ func (ss *SecretSanta) Generate(year *Year, autoSave bool, seed int64) error {
 	copy(receiverUsers, users)
 	p, err := pair(years, users, receiverUsers)
 	if err != nil {
-		return errors.Wrap(err, "failed to generate pairing")
+		return fmt.Errorf("failed to generate pairing: %w", err)
 	}
 	year.Pairing = p
 
 	if autoSave {
-		_, err := ss.AddYear(year)
+		err := ss.AddYear(year)
 		if err != nil {
 			return err
 		}
@@ -55,24 +54,24 @@ func (ss *SecretSanta) Generate(year *Year, autoSave bool, seed int64) error {
 	return nil
 }
 
-func pair(years []*Year, byers []*User, receivers []*User) ([]*Pairing, error) {
-	if len(byers) == 0 && len(receivers) == 0 {
+func pair(years []*Year, buyers []*User, receivers []*User) ([]*Pairing, error) {
+	if len(buyers) == 0 && len(receivers) == 0 {
 		return []*Pairing{}, nil
-	} else if len(byers) == 0 {
-		return nil, errNoPartner
+	} else if len(buyers) == 0 {
+		return nil, fmt.Errorf("buyers could not be null: %w", errNoPartner)
 	}
-	byerIndex := rand.Intn(len(byers))
-	byer := byers[byerIndex]
+	buyerIndex := rand.Intn(len(buyers))
+	buyer := buyers[buyerIndex]
 	targetUsers := []*userCount{}
 	max := 0.0
 	for index, user := range receivers {
-		if user == byer {
+		if user == buyer {
 			continue
 		}
 		sub := 1.0
 		for i, year := range years {
 			for _, r := range year.Pairing {
-				if r.ReceiverUserID == user.ID && r.ByerUserID == byer.ID {
+				if r.ReceiverUserID == user.ID && r.BuyerUserID == buyer.ID {
 					sub -= 1.0 / (float64(i) + 1.0)
 					break
 				}
@@ -84,7 +83,7 @@ func pair(years []*Year, byers []*User, receivers []*User) ([]*Pairing, error) {
 		}
 	}
 	if len(targetUsers) == 0 {
-		return nil, errNoPartner
+		return nil, fmt.Errorf("target user couldn`t be null%w", errNoPartner)
 	}
 	multi := math.Pow10(int(math.Ceil(math.Log10(max))))
 	random := math.Mod(rand.Float64()*multi, max)
@@ -97,14 +96,14 @@ func pair(years []*Year, byers []*User, receivers []*User) ([]*Pairing, error) {
 		}
 	}
 	pairing := &Pairing{
-		ByerUserID:     byer.ID,
+		BuyerUserID:    buyer.ID,
 		ReceiverUserID: partner.user.ID,
 		Rating:         partner.count,
 	}
 
-	byers = append(byers[:byerIndex], byers[byerIndex+1:]...)
+	buyers = append(buyers[:buyerIndex], buyers[buyerIndex+1:]...)
 	receivers = append(receivers[:partner.index], receivers[partner.index+1:]...)
-	p, err := pair(years, byers, receivers)
+	p, err := pair(years, buyers, receivers)
 	if err != nil {
 		return nil, err
 	}

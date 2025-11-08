@@ -1,20 +1,12 @@
 package secretsanta
 
 import (
-	"encoding/json"
-
-	"github.com/boltdb/bolt"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-)
-
-const (
-	userBucket = "User"
+	"fmt"
 )
 
 // User is a represatation of participant
 type User struct {
-	ID        string
+	ID        uint32
 	Firstname string
 	Lastname  string
 	Enabled   bool
@@ -38,134 +30,103 @@ func (us UserSlice) Swap(i, j int) {
 	us.Users[i], us.Users[j] = us.Users[j], us.Users[i]
 }
 
-// AddUser add a user to the database
-func (ss *SecretSanta) AddUser(user *User) (string, error) {
-	if user == nil {
-		return "", errors.New("user is nil")
-	}
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create uuid")
-	}
-	user.ID = id.String()
-	key, err := id.MarshalText()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal uuid")
-	}
-	buf, err := json.Marshal(user)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal user to json")
-	}
-	err = ss.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(userBucket))
-
-		if err := b.Put(key, buf); err != nil {
-			return errors.Wrap(err, "failed to save user to db")
-		}
-
-		return nil
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create user")
-	}
-	return id.String(), nil
+func (ss *SecretSanta) initUserTable() error {
+	_, err := ss.db.Exec(`CREATE TABLE IF NOT EXISTS User (
+		    id INTEGER PRIMARY KEY,
+		    firstname VARCHAR(255),
+			lastname VARCHAR(255) NOT NULL,
+			enabled BOOLEAN DEFAULT true,
+			email VARCHAR(255) unique
+		);`)
+	return err
 }
 
-// UdateUser updates a user in the database
-func (ss *SecretSanta) UdateUser(user *User) error {
+// AddUser add a user to the database
+func (ss *SecretSanta) AddUser(user *User) (uint32, error) {
 	if user == nil {
-		return errors.New("user is nil")
+		return 0, fmt.Errorf("user is nil")
 	}
-	buf, err := json.Marshal(user)
+	result, err := ss.db.Exec(`INSERT INTO User(firstname,lastname,enabled,email) 
+		VALUES(?,?,?,?)`,
+		user.Firstname, user.Lastname, user.Enabled, user.Email)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal user to json")
+		return 0, fmt.Errorf("failed to create user: %w", err)
 	}
-	uid, err := uuid.Parse(user.ID)
+	id, err := result.LastInsertId()
 	if err != nil {
-		return errors.Wrap(err, "failed to parse uuid")
+		return 0, fmt.Errorf("failed to get last insert id: %w", err)
 	}
-	key, err := uid.MarshalText()
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal uuid")
+	user.ID = uint32(id)
+	return user.ID, nil
+}
+
+// UpdateUser updates a user in the database
+func (ss *SecretSanta) UpdateUser(user *User) error {
+	if user == nil {
+		return fmt.Errorf("user is nil")
 	}
-	err = ss.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(userBucket))
-		if len(b.Get(key)) == 0 {
-			return errors.New("no user found to update")
-		}
-		if err := b.Put(key, buf); err != nil {
-			return errors.Wrap(err, "failed to save user to db")
-		}
-		return nil
-	})
+	if user.ID == 0 {
+		return fmt.Errorf("user id is 0")
+	}
+	result, err := ss.db.Exec(`UPDATE User 
+		SET firstname = ?,lastname = ?,enabled = ?,email = ?) 
+		WHERE ID = ?`,
+		user.Firstname, user.Lastname, user.Enabled, user.Email, user.ID)
 	if err != nil {
-		return errors.Wrap(err, "failed to update user")
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("failed to update user")
 	}
 	return nil
 }
 
 // ListUsers lists all user in the database
 func (ss *SecretSanta) ListUsers(disabled bool) ([]*User, error) {
-	users := []*User{}
-	err := ss.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(userBucket))
-		b.ForEach(func(k, v []byte) error {
-			user := &User{}
-			if err := json.Unmarshal(v, user); err != nil {
-				return errors.Wrap(err, "failed to unmarshal user")
-			}
-			if !user.Enabled && !disabled {
-				return nil
-			}
-			users = append(users, user)
-			return nil
-		})
-		return nil
-	})
+	rows, err := ss.db.Query("SELECT * FROM User WHERE enabled = ?;", !disabled)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list users")
+		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
+	var users []*User
+	for rows.Next() {
+		user := &User{}
+		err = rows.Scan(&user.ID, &user.Firstname, &user.Lastname, &user.Enabled, &user.Email)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user row: %w", err)
+		}
+		users = append(users, user)
+	}
+
 	return users, nil
 }
 
 // GetUser gets a user by id
-func (ss *SecretSanta) GetUser(id string) (*User, error) {
-	uid, err := uuid.Parse(id)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse uuid")
-	}
-	key, err := uid.MarshalText()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal uuid")
-	}
+func (ss *SecretSanta) GetUser(id uint32) (*User, error) {
+	row := ss.db.QueryRow("SELECT * FROM User WHERE ID = ?;", id)
 	user := &User{}
-	err = ss.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(userBucket))
-		v := b.Get(key)
-		if err := json.Unmarshal(v, user); err != nil {
-			return errors.Wrap(err, "failed to unmarshal user")
-		}
-		return nil
-	})
+	err := row.Scan(&user.ID, &user.Firstname, &user.Lastname, &user.Enabled, &user.Email)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load user")
+		return nil, fmt.Errorf("failed to scan user row: %w", err)
 	}
 	return user, nil
 }
 
 // RemoveUser remove a user by id
-func (ss *SecretSanta) RemoveUser(id string) error {
-	uid, err := uuid.Parse(id)
+func (ss *SecretSanta) RemoveUser(id uint32) error {
+	result, err := ss.db.Exec("DELETE FROM User WHERE ID = ?;", id)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse uuid")
+		return fmt.Errorf("failed to delete user: %w", err)
 	}
-	key, err := uid.MarshalText()
+	count, err := result.RowsAffected()
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal uuid")
+		return fmt.Errorf("failed to read affected rows: %w", err)
 	}
-	err = ss.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(userBucket))
-		return b.Delete(key)
-	})
-	return err
+	if count == 0 {
+		return fmt.Errorf("failed to delete user")
+	}
+	return nil
 }

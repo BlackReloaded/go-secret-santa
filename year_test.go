@@ -19,12 +19,12 @@ func TestSecretSanta_Year(t *testing.T) {
 		Description: "Description",
 		YearID:      2018,
 	}
-	uid, err := ss.AddYear(year)
+	err = ss.AddYear(year)
 	if err != nil {
 		t.Error("failed to create year")
 	}
 
-	year2, err := ss.GetYear(uid)
+	year2, err := ss.GetYear(year.YearID)
 	if err != nil {
 		t.Errorf("failed to load year: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestSecretSanta_Year(t *testing.T) {
 	}
 
 	year.Amount = 30
-	err = ss.UdateYear(year)
+	err = ss.UpdateYear(year)
 	if err != nil {
 		t.Errorf("failed to update year: %v", err)
 	}

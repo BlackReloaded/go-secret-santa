@@ -33,7 +33,7 @@ func TestSecretSant_User(t *testing.T) {
 	}
 
 	user.Enabled = false
-	err = ss.UdateUser(user)
+	err = ss.UpdateUser(user)
 	if err != nil {
 		t.Error("failed to update user")
 	}

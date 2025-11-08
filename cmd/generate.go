@@ -1,15 +1,15 @@
 package main
 
 import (
-	"log"
-	"net/smtp"
-	"strconv"
-	"strings"
-	"time"
 	"bufio"
 	"fmt"
-	"syscall"
+	"log"
+	"net/smtp"
 	"os"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/blackreloaded/go-secret-santa"
 	"github.com/spf13/cobra"
@@ -20,10 +20,12 @@ var server string
 var from string
 var template string
 var auth bool
+var send bool
 
 func init() {
 	rootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().BoolVar(&auth, "auth", true, "Smtp need auth")
+	generateCmd.Flags().BoolVar(&send, "send", false, "Send mails")
 	generateCmd.Flags().StringVar(&server, "server", "", "Mail server")
 	generateCmd.Flags().StringVar(&from, "from", "", "Mail sender")
 	generateCmd.Flags().StringVar(&template, "template", "", "Text template for mail")
@@ -50,7 +52,7 @@ var generateCmd = &cobra.Command{
 		if len(args) > 1 {
 			amount, err := strconv.ParseFloat(args[1], 32)
 			if err != nil {
-				log.Fatal("failed to parse yearid")
+				log.Fatal("failed to parse yearid: %w", err)
 			}
 			year.Amount = float32(amount)
 		}
@@ -59,52 +61,58 @@ var generateCmd = &cobra.Command{
 		}
 		err := secretSanta.Generate(year, false, 0)
 		if err != nil {
-			log.Fatalf("Failed to generate year: %v", err)
+			log.Fatalf("Failed to generate year: %w", err)
 		}
+		err = secretSanta.AddYear(year)
+		if err != nil {
+			log.Fatalf("failed to save year: %w", err)
+		}
+		if send {
+			hostname := server[:strings.Index(server, ":")]
+			var username string
+			var password string
+			if auth {
+				reader := bufio.NewReader(os.Stdin)
 
-		hostname := server[:strings.Index(server, ":")]
-		var username string
-		var password string
-		if auth {
-			reader := bufio.NewReader(os.Stdin)
+				fmt.Print("Enter Username: ")
+				username, err = reader.ReadString('\n')
+				if err != nil {
+					log.Fatal("failed to read username: %w", err)
+				}
 
-			fmt.Print("Enter Username: ")
-			username, err = reader.ReadString('\n')
-			if err!=nil {
-				log.Fatal("failed to read username")
+				fmt.Print("Enter Password: ")
+				bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+				if err != nil {
+					log.Fatal("failed to read password: %w", err)
+				}
+				password = string(bytePassword)
+
+				username, password = strings.TrimSpace(username), strings.TrimSpace(password)
 			}
-		
-			fmt.Print("Enter Password: ")
-			bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+			if from == "" {
+				from = username
+			}
+			log.Printf("year generated, sending messages with %s\n", hostname)
+			session := &mailSession{
+				from:   from,
+				server: server,
+				year:   year.YearID,
+				auth: smtp.PlainAuth(
+					"",
+					username,
+					password,
+					hostname,
+				),
+			}
+			err = secretSanta.SendInformation(year, template, session.sendInfoMail)
 			if err != nil {
-				log.Fatal("failed to read username")
+				log.Fatalf("failed to send year information: %v", err)
 			}
-			password = string(bytePassword)
-		
-			username, password =  strings.TrimSpace(username), strings.TrimSpace(password)
-		}
-		if from=="" {
-			from = username
-		}
-		log.Printf("year generated, sending messages with %s\n", hostname)
-		session := &mailSession{
-			from:   from,
-			server: server,
-			year: year.YearID,
-			auth: smtp.PlainAuth(
-				"",
-				username,
-				password,
-				hostname,
-			),
-		}
-		err = secretSanta.SendInformation(year, template, session.sendInfoMail)
-		if err != nil {
-			log.Fatalf("failed to send year information: %v", err)
-		}
-		_, err = secretSanta.AddYear(year)
-		if err != nil {
-			log.Fatalf("failed to save year: %v", err)
+		} else {
+			secretSanta.SendInformation(year, template, func(to, text string) error {
+				_, err := fmt.Printf("%s\n%s", to, text)
+				return err
+			})
 		}
 	},
 }
@@ -113,14 +121,15 @@ type mailSession struct {
 	auth   smtp.Auth
 	server string
 	from   string
-	year uint32
+	year   uint32
 }
 
 func (ms *mailSession) sendInfoMail(to, text string) error {
 	log.Printf("Send mail to %s", to)
 	// Connect to the server, authenticate, set the sender and recipient,
 	// and send the email all in one step.
-	mail := fmt.Sprintf("Subject: Wichteln %d\r\nFrom:%s\r\nTo:%s\r\n\r\n%s", ms.year, ms.from, to, text)
+	date := time.Now().Format("Mon, 2 Jan 2006 15:04:05 -0700")
+	mail := fmt.Sprintf("Subject: Wichteln %d\r\nFrom:%s\r\nDate:%s\r\nTo:%s\r\n\r\n%s", ms.year, ms.from, date, to, text)
 	return smtp.SendMail(
 		ms.server,
 		ms.auth,
