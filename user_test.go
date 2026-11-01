@@ -12,7 +12,7 @@ func TestSecretSant_User(t *testing.T) {
 		t.Fatal("failed to open database: test.db")
 	}
 	defer ss.Close()
-	defer os.Remove("user_test.db")
+	defer os.Remove("testdata/user_test.db")
 
 	user := &User{
 		Email:     "test@test.com",
@@ -51,6 +51,13 @@ func TestSecretSant_User(t *testing.T) {
 	}
 	if len(users) != 1 {
 		t.Error("user filter is not working")
+	}
+	users, err = ss.ListAllUsers()
+	if err != nil {
+		t.Error("failed to list all users")
+	}
+	if len(users) != 1 {
+		t.Error("list all users is not working")
 	}
 	found := false
 	for _, v := range users {

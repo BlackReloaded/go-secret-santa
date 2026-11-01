@@ -53,7 +53,7 @@ var yearAddCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Year created with id %s\n", year.YearID)
+		log.Printf("Year created with id %d\n", year.YearID)
 	},
 }
 

@@ -88,23 +88,19 @@ func TestSecretSanta_Generate(t *testing.T) {
 	}
 	buf := bytes.NewBufferString("")
 	ss.PrintAll(buf, year)
-	test := `+-------------+-----------+
-| Year        |      2018 |
-| Amount      |      15.5 |
-| Description | Alles neu |
-+-------------+-----------+
-+-----+--------------------------------+--------------------------------+--------+
-| NO  |              BUYER              |            RECEIVER            | RATING |
-+-----+--------------------------------+--------------------------------+--------+
-|   0 | Lastname_0,Firstname_0         | Lastname_1,Firstname_1         |    0.5 |
-|     | (0@example.de)                 | (1@example.de)                 |        |
-|   1 | Lastname_2,Firstname_2         | Lastname_3,Firstname_3         |    0.5 |
-|     | (2@example.de)                 | (3@example.de)                 |        |
-|   2 | Lastname_3,Firstname_3         | Lastname_2,Firstname_2         |      1 |
-|     | (3@example.de)                 | (2@example.de)                 |        |
-|   3 | Lastname_1,Firstname_1         | Lastname_0,Firstname_0         |      1 |
-|     | (1@example.de)                 | (0@example.de)                 |        |
-+-----+--------------------------------+--------------------------------+--------+
+	test := `┌─────────────┬───────────┐
+│ Year        │ 2018      │
+│ Amount      │ 15.5      │
+│ Description │ Alles neu │
+└─────────────┴───────────┘
+┌──────┬───────────────────────────────────────┬───────────────────────────────────────┬────────┐
+│ NO . │                 BUYER                 │               RECEIVER                │ RATING │
+├──────┼───────────────────────────────────────┼───────────────────────────────────────┼────────┤
+│ 0    │ Lastname_0,Firstname_0 (0@example.de) │ Lastname_3,Firstname_3 (3@example.de) │ 1      │
+│ 1    │ Lastname_2,Firstname_2 (2@example.de) │ Lastname_1,Firstname_1 (1@example.de) │ 1      │
+│ 2    │ Lastname_3,Firstname_3 (3@example.de) │ Lastname_2,Firstname_2 (2@example.de) │ 1      │
+│ 3    │ Lastname_1,Firstname_1 (1@example.de) │ Lastname_0,Firstname_0 (0@example.de) │ 1      │
+└──────┴───────────────────────────────────────┴───────────────────────────────────────┴────────┘
 `
 	if test != buf.String() {
 		t.Errorf("failed to generate year: want %s, got %s,", test, buf.String())
@@ -123,8 +119,8 @@ func TestSecretSanta_Generate(t *testing.T) {
 		t.Errorf("failed to send information: %v", err)
 	}
 
-	test = `0@example.de:0@example.de->1@example.de
-2@example.de:2@example.de->3@example.de
+	test = `0@example.de:0@example.de->3@example.de
+2@example.de:2@example.de->1@example.de
 3@example.de:3@example.de->2@example.de
 1@example.de:1@example.de->0@example.de
 `

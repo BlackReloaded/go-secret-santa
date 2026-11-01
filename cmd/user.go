@@ -14,6 +14,8 @@ import (
 var firstname string
 var lastname string
 var email string
+var userLsAll bool
+var userLsDisabled bool
 
 func init() {
 	rootCmd.AddCommand(userCmd)
@@ -21,6 +23,8 @@ func init() {
 	userAddCmd.Flags().StringVar(&firstname, "firstname", "", "Firstname of the user")
 	userAddCmd.Flags().StringVar(&lastname, "lastname", "", "Lastname of the user")
 	userCmd.AddCommand(userLsCmd)
+	userLsCmd.Flags().BoolVar(&userLsAll, "all", false, "list all users, including disabled ones")
+	userLsCmd.Flags().BoolVar(&userLsDisabled, "disabled", false, "list only disabled users")
 	userCmd.AddCommand(userEnableCmd)
 	userCmd.AddCommand(userDisableCmd)
 	userCmd.AddCommand(userRemoveCmd)
@@ -62,9 +66,23 @@ var userAddCmd = &cobra.Command{
 
 var userLsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "list alls users",
+	Short: "list users",
 	Run: func(cmd *cobra.Command, args []string) {
-		users, err := secretSanta.ListUsers(true)
+		if userLsAll && userLsDisabled {
+			log.Fatal("--all and --disabled are mutually exclusive")
+		}
+		var (
+			users []*secretsanta.User
+			err   error
+		)
+		switch {
+		case userLsAll:
+			users, err = secretSanta.ListAllUsers()
+		case userLsDisabled:
+			users, err = secretSanta.ListUsers(true)
+		default:
+			users, err = secretSanta.ListUsers(false)
+		}
 		if err != nil {
 			log.Fatalf("failed to load users: %v", err)
 		}
@@ -104,7 +122,10 @@ var userUdateCmd = &cobra.Command{
 		if email != "" {
 			user.Email = email
 		}
-		secretSanta.UpdateUser(user)
+		err = secretSanta.UpdateUser(user)
+		if err != nil {
+			log.Fatalf("failed to update user: %v", err)
+		}
 		log.Printf("User with id '%s' updated\n", args[0])
 	},
 }
@@ -141,8 +162,8 @@ var userEnableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
 			log.Fatal("Need user id")
-		} else {
-			changeUser(args[0], true)
+		} else if err := changeUser(args[0], true); err != nil {
+			log.Fatalf("failed to enable user: %v", err)
 		}
 	},
 }
@@ -153,8 +174,8 @@ var userDisableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
 			log.Fatal("Need user id")
-		} else {
-			changeUser(args[0], false)
+		} else if err := changeUser(args[0], false); err != nil {
+			log.Fatalf("failed to disable user: %v", err)
 		}
 	},
 }

@@ -79,7 +79,7 @@ func TestSecretSanta_PrintAll(t *testing.T) {
 		t.Errorf("failed to open database: %v", err)
 	}
 	defer ss.Close()
-	defer os.Remove("secretsanta_test.db")
+	defer os.Remove("testdata/secretsanta_test.db")
 
 	bid, err := ss.AddUser(&User{
 		Email:     "buyer@example.de",
@@ -114,17 +114,16 @@ func TestSecretSanta_PrintAll(t *testing.T) {
 	}
 	buf := bytes.NewBufferString("")
 	ss.PrintAll(buf, y)
-	result := `+-------------+-------------+
-| Year        |        2018 |
-| Amount      |        15.5 |
-| Description | Description |
-+-------------+-------------+
-+-----+--------------------------------+--------------------------------+--------+
-| NO  |              BYER              |            RECEIVER            | RATING |
-+-----+--------------------------------+--------------------------------+--------+
-|   0 | Musterman,Max                  | Doe,John (receiver@example.de) |    0.5 |
-|     | (buyer@example.de)              |                                |        |
-+-----+--------------------------------+--------------------------------+--------+
+	result := `┌─────────────┬─────────────┐
+│ Year        │ 2018        │
+│ Amount      │ 15.5        │
+│ Description │ Description │
+└─────────────┴─────────────┘
+┌──────┬──────────────────────────────────┬────────────────────────────────┬────────┐
+│ NO . │              BUYER               │            RECEIVER            │ RATING │
+├──────┼──────────────────────────────────┼────────────────────────────────┼────────┤
+│ 0    │ Musterman,Max (buyer@example.de) │ Doe,John (receiver@example.de) │ 0.5    │
+└──────┴──────────────────────────────────┴────────────────────────────────┴────────┘
 `
 	if result != buf.String() {
 		t.Errorf("output mismatch want:\n%s, got:\n%s,", result, buf.String())
@@ -137,7 +136,7 @@ func TestSecretSanta_SendInformation(t *testing.T) {
 		t.Errorf("failed to open database: %v", err)
 	}
 	defer ss.Close()
-	defer os.Remove("secretsanta_test.db")
+	defer os.Remove("testdata/secretsanta_test.db")
 
 	bid, err := ss.AddUser(&User{
 		Email:     "buyer@example.de",
@@ -183,7 +182,7 @@ Description
 		}
 		return nil
 	}
-	tmpl := `{{.ByerUser}}
+	tmpl := `{{.BuyerUser}}
 {{.ReceiverUser}}
 {{.Year}}
 {{.Desc}}

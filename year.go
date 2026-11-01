@@ -48,7 +48,7 @@ func (ss *SecretSanta) initYearTable() error {
 	_, err = ss.db.Exec(`CREATE TABLE IF NOT EXISTS Year_User (
 		    yearID INTEGER REFERENCES Year,
 		    buyerID INTEGER REFERENCES User,
-		    receiverID INTEGER,
+		    receiverID INTEGER REFERENCES User,
     		rating NUMERIC,
     		PRIMARY KEY(yearID, buyerID, receiverID)
 		);`)
@@ -63,18 +63,26 @@ func (ss *SecretSanta) AddYear(year *Year) error {
 	if year.YearID == 0 {
 		return fmt.Errorf("year id couldn`t be 0")
 	}
-	_, err := ss.db.Exec(`INSERT INTO Year(yearID,description,amount)
+	tx, err := ss.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`INSERT INTO Year(yearID,description,amount)
 		VALUES (?, ?, ?);`,
 		year.YearID, year.Description, year.Amount)
 	if err != nil {
 		return fmt.Errorf("failed to insert year: %w", err)
 	}
 	for _, p := range year.Pairing {
-		_, err = ss.db.Exec(`INSERT INTO Year_User(yearID,buyerID,receiverID,rating)
+		_, err = tx.Exec(`INSERT INTO Year_User(yearID,buyerID,receiverID,rating)
 		VALUES (?, ?, ?, ?)`,
 			year.YearID, p.BuyerUserID, p.ReceiverUserID, p.Rating)
+		if err != nil {
+			return fmt.Errorf("failed to insert pairing: %w", err)
+		}
 	}
-	return err
+	return tx.Commit()
 }
 
 // UpdateYear updates a year in the database
@@ -85,22 +93,43 @@ func (ss *SecretSanta) UpdateYear(year *Year) error {
 	if year.YearID == 0 {
 		return fmt.Errorf("year id couldn`t be 0")
 	}
-	_, err := ss.db.Exec(`UPDATE Year SET description = ?, amount = ? WHERE yearID = ?`,
+	// If the year does not exist yet it is created, all pairings of the
+	// year are replaced with the given ones
+	tx, err := ss.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE Year SET description = ?, amount = ? WHERE yearID = ?`,
 		year.Description, year.Amount, year.YearID)
 	if err != nil {
-		return fmt.Errorf("failed to upsert year: %w", err)
+		return fmt.Errorf("failed to update year: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	if rows == 0 {
+		_, err = tx.Exec(`INSERT INTO Year(yearID,description,amount)
+			VALUES (?, ?, ?)`,
+			year.YearID, year.Description, year.Amount)
+		if err != nil {
+			return fmt.Errorf("failed to insert year: %w", err)
+		}
+	}
+	_, err = tx.Exec(`DELETE FROM Year_User WHERE yearID = ?`, year.YearID)
+	if err != nil {
+		return fmt.Errorf("failed to delete pairings: %w", err)
 	}
 	for _, p := range year.Pairing {
-		_, err = ss.db.Exec(`INSERT INTO Year_User(yearID,buyerID,receiverID,rating)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(yearID, buyerID, receiverID) 
-		DO 
-		   UPDATE SET rating = ?
-		   WHERE yearID = ?, buyerID = ?, receiverID = ?;`,
-			year.YearID, p.BuyerUserID, p.ReceiverUserID, p.Rating,
-			p.Rating, year.YearID, p.BuyerUserID, p.ReceiverUserID)
+		_, err = tx.Exec(`INSERT INTO Year_User(yearID,buyerID,receiverID,rating)
+		VALUES (?, ?, ?, ?)`,
+			year.YearID, p.BuyerUserID, p.ReceiverUserID, p.Rating)
+		if err != nil {
+			return fmt.Errorf("failed to insert pairing: %w", err)
+		}
 	}
-	return err
+	return tx.Commit()
 }
 
 // ListYears lists all years in the database
@@ -109,21 +138,28 @@ func (ss *SecretSanta) ListYears() ([]*Year, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to select year: %w", err)
 	}
+	defer rows.Close()
 	var years []*Year
 	for rows.Next() {
 		year := &Year{
 			Pairing: make([]*Pairing, 0),
 		}
-		rows.Scan(&year.YearID, &year.Description, &year.Amount)
+		if err := rows.Scan(&year.YearID, &year.Description, &year.Amount); err != nil {
+			return nil, fmt.Errorf("failed to scan year row: %w", err)
+		}
 		subRows, err := ss.db.Query("SELECT buyerID,receiverID,rating FROM Year_User WHERE yearID=?;", year.YearID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to select year pairing: %w", err)
 		}
 		for subRows.Next() {
 			var p = &Pairing{}
-			subRows.Scan(&p.ReceiverUserID, &p.BuyerUserID, &p.Rating)
+			if err := subRows.Scan(&p.BuyerUserID, &p.ReceiverUserID, &p.Rating); err != nil {
+				subRows.Close()
+				return nil, fmt.Errorf("failed to scan pairing row: %w", err)
+			}
 			year.Pairing = append(year.Pairing, p)
 		}
+		subRows.Close()
 		years = append(years, year)
 	}
 	return years, nil
@@ -138,14 +174,19 @@ func (ss *SecretSanta) GetYear(id uint32) (*Year, error) {
 	year := &Year{
 		Pairing: make([]*Pairing, 0),
 	}
-	row.Scan(&year.YearID, &year.Description, &year.Amount)
+	if err := row.Scan(&year.YearID, &year.Description, &year.Amount); err != nil {
+		return nil, fmt.Errorf("failed to scan year row: %w", err)
+	}
 	subRows, err := ss.db.Query("SELECT buyerID,receiverID,rating FROM Year_User WHERE yearID=?;", id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select year pairing: %w", err)
 	}
+	defer subRows.Close()
 	for subRows.Next() {
 		var p = &Pairing{}
-		subRows.Scan(&p.ReceiverUserID, &p.BuyerUserID, &p.Rating)
+		if err := subRows.Scan(&p.BuyerUserID, &p.ReceiverUserID, &p.Rating); err != nil {
+			return nil, fmt.Errorf("failed to scan pairing row: %w", err)
+		}
 		year.Pairing = append(year.Pairing, p)
 	}
 	return year, nil
@@ -153,13 +194,25 @@ func (ss *SecretSanta) GetYear(id uint32) (*Year, error) {
 
 // RmYear removes a year by id
 func (ss *SecretSanta) RmYear(id uint32) error {
-	_, err := ss.db.Exec("DELETE FROM Year WHERE yearID=?", id)
+	tx, err := ss.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("DELETE FROM Year WHERE yearID=?", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete year: %w", err)
 	}
-	_, err = ss.db.Exec("DELETE FROM Year_User WHERE yearID=?", id)
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("failed to delete year: no year with id %d", id)
+	}
+	_, err = tx.Exec("DELETE FROM Year_User WHERE yearID=?", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete year pairing: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }

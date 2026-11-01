@@ -1,6 +1,7 @@
 package secretsanta
 
 import (
+	"database/sql"
 	"fmt"
 )
 
@@ -68,8 +69,8 @@ func (ss *SecretSanta) UpdateUser(user *User) error {
 	if user.ID == 0 {
 		return fmt.Errorf("user id is 0")
 	}
-	result, err := ss.db.Exec(`UPDATE User 
-		SET firstname = ?,lastname = ?,enabled = ?,email = ?) 
+	result, err := ss.db.Exec(`UPDATE User
+		SET firstname = ?,lastname = ?,enabled = ?,email = ?
 		WHERE ID = ?`,
 		user.Firstname, user.Lastname, user.Enabled, user.Email, user.ID)
 	if err != nil {
@@ -85,16 +86,32 @@ func (ss *SecretSanta) UpdateUser(user *User) error {
 	return nil
 }
 
-// ListUsers lists all user in the database
+// ListUsers lists users in the database. With disabled=false only enabled
+// users are returned, with disabled=true only disabled users.
 func (ss *SecretSanta) ListUsers(disabled bool) ([]*User, error) {
 	rows, err := ss.db.Query("SELECT * FROM User WHERE enabled = ?;", !disabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
+	defer rows.Close()
+	return scanUsers(rows)
+}
+
+// ListAllUsers lists all users in the database, enabled and disabled
+func (ss *SecretSanta) ListAllUsers() ([]*User, error) {
+	rows, err := ss.db.Query("SELECT * FROM User;")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+	return scanUsers(rows)
+}
+
+func scanUsers(rows *sql.Rows) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		user := &User{}
-		err = rows.Scan(&user.ID, &user.Firstname, &user.Lastname, &user.Enabled, &user.Email)
+		err := rows.Scan(&user.ID, &user.Firstname, &user.Lastname, &user.Enabled, &user.Email)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user row: %w", err)
 		}

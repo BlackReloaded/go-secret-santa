@@ -43,6 +43,9 @@ func (ss *SecretSanta) Close() error {
 
 // New open the bolt databse
 func New(dbfile string) (*SecretSanta, error) {
+	if dbfile == "" {
+		return nil, fmt.Errorf("dbfile is empty")
+	}
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database %q: %w", dbfile, err)
@@ -132,11 +135,11 @@ func (ss *SecretSanta) SendInformation(year *Year, tmpl string, info SendInfo) e
 	for _, v := range year.Pairing {
 		bU := getUser(users, v.BuyerUserID)
 		if bU == nil {
-			return fmt.Errorf("no user with id %q found", v.BuyerUserID)
+			return fmt.Errorf("no user with id %d found", v.BuyerUserID)
 		}
 		rU := getUser(users, v.ReceiverUserID)
 		if rU == nil {
-			return fmt.Errorf("no user with id %q found", v.ReceiverUserID)
+			return fmt.Errorf("no user with id %d found", v.ReceiverUserID)
 		}
 		if tmpl == "" {
 			tmpl = infoTmpl
@@ -146,21 +149,24 @@ func (ss *SecretSanta) SendInformation(year *Year, tmpl string, info SendInfo) e
 			return fmt.Errorf("failed to parse template: %w", err)
 		}
 		w := &strings.Builder{}
-		tmpl.Execute(w, struct {
-			ByerUser     *User
+		err = tmpl.Execute(w, struct {
+			BuyerUser    *User
 			ReceiverUser *User
 			Year         uint32
 			Desc         string
 			Amount       float32
 			Rating       float64
 		}{
-			ByerUser:     bU,
+			BuyerUser:    bU,
 			ReceiverUser: rU,
 			Year:         year.YearID,
 			Desc:         year.Description,
 			Amount:       year.Amount,
 			Rating:       v.Rating,
 		})
+		if err != nil {
+			return fmt.Errorf("failed to execute template for %s: %w", bU.Email, err)
+		}
 		err = info(bU.Email, w.String())
 		if err != nil {
 			return fmt.Errorf("failed to run info method: %w", err)

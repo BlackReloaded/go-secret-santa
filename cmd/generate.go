@@ -13,7 +13,7 @@ import (
 
 	"github.com/blackreloaded/go-secret-santa"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 var server string
@@ -52,7 +52,7 @@ var generateCmd = &cobra.Command{
 		if len(args) > 1 {
 			amount, err := strconv.ParseFloat(args[1], 32)
 			if err != nil {
-				log.Fatal("failed to parse yearid: %w", err)
+				log.Fatalf("failed to parse amount: %v", err)
 			}
 			year.Amount = float32(amount)
 		}
@@ -61,14 +61,18 @@ var generateCmd = &cobra.Command{
 		}
 		err := secretSanta.Generate(year, false, 0)
 		if err != nil {
-			log.Fatalf("Failed to generate year: %w", err)
+			log.Fatalf("Failed to generate year: %v", err)
 		}
-		err = secretSanta.AddYear(year)
+		err = secretSanta.UpdateYear(year)
 		if err != nil {
-			log.Fatalf("failed to save year: %w", err)
+			log.Fatalf("failed to save year: %v", err)
 		}
 		if send {
-			hostname := server[:strings.Index(server, ":")]
+			idx := strings.Index(server, ":")
+			if idx < 0 {
+				log.Fatal("--server must be in the form host:port")
+			}
+			hostname := server[:idx]
 			var username string
 			var password string
 			if auth {
@@ -77,13 +81,13 @@ var generateCmd = &cobra.Command{
 				fmt.Print("Enter Username: ")
 				username, err = reader.ReadString('\n')
 				if err != nil {
-					log.Fatal("failed to read username: %w", err)
+					log.Fatalf("failed to read username: %v", err)
 				}
 
 				fmt.Print("Enter Password: ")
-				bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+				bytePassword, err := term.ReadPassword(int(syscall.Stdin))
 				if err != nil {
-					log.Fatal("failed to read password: %w", err)
+					log.Fatalf("failed to read password: %v", err)
 				}
 				password = string(bytePassword)
 
